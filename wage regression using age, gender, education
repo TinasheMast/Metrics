@@ -1,0 +1,70 @@
+# Using the USA CPS data for aug 2026 to do a regression using education, gender, and age as regressors and 
+# salary as the dependent variable. We use two dummy variables for education. 
+
+library(readr)
+aug26pub <- read_csv("Downloads/aug26pub.csv")
+variable_needed_for_regression <- aug26pub %>% select(prtage, pesex, peeduca, pternwa)
+View(variable_needed_for_regression)
+variable_needed_for_regression <- aug26pub %>% select(prtage, pesex, peeduca, pternwa, prerelg)
+# I know i need prerelg to be equal to 1 so that I am only looking at people who were surveyed
+#I also know that i need to restrict weekly earnings to positive (pternwa) numbers
+
+data_frame= subset(variable_needed_for_regression, prerelg== 1 & pternwa >0)
+
+View(data_frame)  
+dim(data_frame)
+data_frame$earn = data_frame$pternwa
+data_frame$lnearn = log(data_frame$earn)
+# education dummy variables are some highschool/associate and bachelors or higher and the base for comparison is any education lower than
+# highschool or associate
+
+data_frame$high_school = as.numeric(data_frame$peeduca>=39 & data_frame$peeduca<=42)
+data_frame$bachelors_plus = as.numeric(data_frame$peeduca>=43)
+
+data_frame$female = as.numeric(data_frame$pesex==2)
+
+data_frame$female = as.numeric(data_frame$pesex==2) # sets the male = 0, f = 1
+data_frame$age = data_frame$prtage
+
+linear_regression_model = lm(lnearn~female +age+high_school+bachelors_plus, data=data_frame)
+
+summary(linear_regression_model)
+  
+  Call:
+    lm(formula = lnearn ~ female + age + high_school + bachelors_plus, 
+       data = data_frame)
+  
+  Residuals:
+    Min      1Q  Median      3Q     Max 
+  -6.2448 -0.3598  0.0485  0.4090  2.7456 
+  
+  Coefficients:
+    Estimate Std. Error t value Pr(>|t|)    
+  (Intercept)    10.7925410  0.0371685  290.37   <2e-16 ***
+    female         -0.3446662  0.0153484  -22.46   <2e-16 ***
+    age             0.0072362  0.0005249   13.79   <2e-16 ***
+    high_school     0.4554882  0.0322225   14.14   <2e-16 ***
+    bachelors_plus  1.0602040  0.0327461   32.38   <2e-16 ***
+    ---
+    Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+  
+  Residual standard error: 0.7543 on 9734 degrees of freedom
+  Multiple R-squared:  0.2122,	Adjusted R-squared:  0.2118 
+  F-statistic: 655.4 on 4 and 9734 DF,  p-value: < 2.2e-16
+  
+# estimated var_cov matrix
+var_cov = vcov(linear_regression_model)
+var_cov
+
+  (Intercept)        female           age   high_school bachelors_plus
+  (Intercept)     1.381499e-03 -9.419856e-05 -1.076255e-05 -8.841398e-04  -8.551328e-04
+  female         -9.419856e-05  2.355747e-04 -4.179059e-08 -1.137139e-05  -2.932297e-05
+  age            -1.076255e-05 -4.179059e-08  2.755400e-07 -8.528462e-07  -1.407632e-06
+  high_school    -8.841398e-04 -1.137139e-05 -8.528462e-07  1.038287e-03   9.279293e-04
+  bachelors_plus -8.551328e-04 -2.932297e-05 -1.407632e-06  9.279293e-04   1.072304e-03
+
+# standard errors
+se = sqrt(diag(var_cov))
+se
+  (Intercept)         female            age    high_school bachelors_plus 
+  0.0371685200   0.0153484434   0.0005249191   0.0322224552   0.0327460503 
