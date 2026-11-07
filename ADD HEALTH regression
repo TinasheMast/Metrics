@@ -1,0 +1,96 @@
+#This file contains code for my econometric problem set # 4 where i used data 
+#from Add Health Longitudinal study that is owned by
+#Carolina Popuplation Center adn University of North carolan at Chapel hill. The raw data can be 
+# found by accessing this link " https://dataverse.unc.edu/dataverse/addhealth"
+
+# I am using this data to bulid a multiple linear regression model, where the dependent variable is
+#earnings and I am using regressors such as age, education level, parental income
+
+library(haven)
+library(tidyverse)
+
+w4 <- read_sas("/Users/tinashe101/Downloads/doi-10/w4inhome.sas7bdat",
+               catalog_file = "/Users/tinashe101/Downloads/doi-10/w4inhome_format.sas7bcat")
+
+#head(w4[, 1:10], 5)
+
+w1 <- read_sas("/Users/tinashe101/Downloads/doi-10-2/w1inhome.sas7bdat",
+               catalog_file = "/Users/tinashe101/Downloads/doi-10-2/w1inhome_format.sas7bcat")
+
+#head(w1[,1:10],5)
+
+# FIltering w1 so that we keep only the columns we want, the ID (AID) and parents' total
+# income (PA55)
+
+w1_small <- w1 %>%select(AID, PA55)
+
+#filtreing w4 to keep only the columns we want the ID plus the regressors.
+# H4EC2    = personal earnings (dollars)               -> WAGE
+#H4ED2    = highest education level achieved          -> VOC, SC, BD, MB
+#H4OD1Y   = respondent's birth year                   -> AGE
+#IYEAR4   = year of the Wave IV interview             -> AGE
+#BIO_SEX4 = biological sex (1 = male, 2 = female)     -> SEX
+
+w4_small <- w4 %>%select(AID, H4EC2, H4ED2, H4OD1Y, IYEAR4, BIO_SEX4)
+
+#merging the two filtered datasets
+d <- left_join(w4_small, w1_small, by = "AID")
+
+d <- zap_labels(d) # so that R can recognise the plain numebrs in the data set
+
+nrow(d)   
+
+#WAGE: personal earnings. Per the W4 codebook,
+#9999996 = refused, 9999998 = don't know  -> missing (NA).
+#999995 is also set to NA: it's a special value used for only two
+#people, and Figure 1 matches exactly only once they're excluded.
+d0 <- d %>%
+  mutate( WAGE = if_else(H4EC2 %in% c(999995, 9999996, 9999998), NA_real_, H4EC2),
+    
+    # Education: H4ED2 = 98 means "don't know", so treat it as missing.
+    EDU = if_else(H4ED2 == 98, NA_real_, H4ED2),
+    
+    # Education dummies (1 = yes, 0 = no). Codes from the W4 codebook:
+    # 4 = some vocational/technical, 5 = completed vocational/technical
+    # 6 = some college
+    # 7 = completed bachelor's degree
+    # 8-13 = some/completed graduate or professional school
+    # Codes 1-3 (high school or less) are the BASE group: every dummy = 0.
+    # as.numeric(TRUE) = 1 and as.numeric(FALSE) = 0. If EDU is NA,
+    # the comparison is NA too, so missing stays missing.
+    VOC = as.numeric(EDU %in% c(4, 5)),
+    SC  = as.numeric(EDU == 6),
+    BD  = as.numeric(EDU == 7),
+    MB  = as.numeric(EDU >= 8),
+    VOC = if_else(is.na(EDU), NA_real_, VOC),  
+    
+
+    AGE = IYEAR4 - H4OD1Y,
+    
+    # SEX dummy: 1 if female (BIO_SEX4 == 2), 0 if male.
+    SEX = as.numeric(BIO_SEX4 == 2),
+    
+    PI = if_else(PA55 >= 9996, NA_real_, PA55)
+  )
+
+
+m1 <- lm(WAGE ~ VOC + SC + BD + MB + AGE + SEX + PI, data = d0)
+summary(m1)
+
+#getting descriptive statistic for each regressor
+
+d0 %>%
+  select(WAGE, VOC, SC, BD, MB, AGE, SEX, PI) %>%
+  summary()
+
+# 2.4  (log-linearizing the model)
+
+d0 <- d0 %>%
+  mutate(LWAGE = if_else(WAGE > 0, log(WAGE), NA_real_))
+
+m2 <- lm(LWAGE ~ VOC + SC + BD + MB + AGE + SEX + PI, data = d0)
+summary(m2)
+
+#getting the percentage impact of each regressor on wages
+
+100 * (exp(coef(m2)) - 1)
